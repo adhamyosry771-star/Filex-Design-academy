@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
@@ -9,13 +9,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
               sans: ['Cairo', 'sans-serif'],
             },
             colors: {
-              primary: '#818cf8', // Indigo 400 (Softer for dark mode)
+              primary: '#818cf8', // Indigo 400
               secondary: '#f472b6', // Pink 400
               dark: '#0f172a', // Slate 900
               glass: 'rgba(255, 255, 255, 0.05)',
@@ -25,11 +26,37 @@
               'float': 'float 6s ease-in-out infinite',
               'float-delayed': 'float 6s ease-in-out 3s infinite',
               'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'expand-portal': 'expand-portal 2s cubic-bezier(0.7, 0, 0.3, 1) forwards',
+              'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
+              'warp': 'warp 20s linear infinite', // Slower warp for deep space feel
+              'fade-out': 'fade-out 0.5s ease-out forwards',
+              'fade-in-up': 'fade-in-up 0.5s ease-out forwards',
             },
             keyframes: {
               float: {
                 '0%, 100%': { transform: 'translateY(0)' },
                 '50%': { transform: 'translateY(-20px)' },
+              },
+              'expand-portal': {
+                '0%': { transform: 'scale(0.1)', opacity: '1' },
+                '50%': { opacity: '1' },
+                '100%': { transform: 'scale(150)', opacity: '0' }
+              },
+              'pulse-glow': {
+                '0%, 100%': { opacity: '0.6', transform: 'scale(1)' },
+                '50%': { opacity: '1', transform: 'scale(1.1)' }
+              },
+              'warp': {
+                '0%': { transform: 'scale(1) rotate(0deg)' },
+                '100%': { transform: 'scale(1.5) rotate(10deg)' }
+              },
+              'fade-out': {
+                '0%': { opacity: '1', visibility: 'visible' },
+                '100%': { opacity: '0', visibility: 'hidden' }
+              },
+              'fade-in-up': {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' }
               }
             }
           }
@@ -53,7 +80,7 @@
 }
 </script>
 </head>
-  <body class="bg-slate-900 text-slate-50 font-sans antialiased selection:bg-secondary/30 selection:text-white overflow-x-hidden">
+  <body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 font-sans antialiased selection:bg-secondary/30 selection:text-white overflow-x-hidden transition-colors duration-300">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

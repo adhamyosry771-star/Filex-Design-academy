@@ -54,4 +54,46 @@ export interface Banner {
   createdAt: string;
 }
 
-export type PageView = 'HOME' | 'REQUEST_FORM' | 'SUCCESS' | 'LOGIN' | 'REGISTER' | 'DASHBOARD' | 'ADMIN_DASHBOARD' | 'CONTACT';
+export interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  isRead: boolean;
+  createdAt: string;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  createdBy: string;
+}
+
+// --- Live Support Types ---
+
+export interface ChatMessage {
+  id: string;
+  senderId: string; // 'user', 'bot', or Admin ID
+  senderName: string;
+  text: string;
+  timestamp: string;
+  isAdmin: boolean;
+}
+
+export interface SupportSession {
+  id: string;
+  userId: string;
+  userName: string;
+  adminId: string | null; // Assigned Admin
+  status: 'OPEN' | 'CLOSED';
+  lastMessageAt: string;
+  unreadByUser: number;
+  unreadByAdmin: number;
+}
+
+export type PageView = 'HOME' | 'REQUEST_FORM' | 'SUCCESS' | 'LOGIN' | 'REGISTER' | 'DASHBOARD' | 'ADMIN_DASHBOARD' | 'CONTACT' | 'USER_MESSAGES' | 'LIVE_SUPPORT';
+
+export type Language = 'ar' | 'en' | 'fr';
