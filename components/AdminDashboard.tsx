@@ -1,8 +1,9 @@
 
+
 import React, { useEffect, useState, useRef } from 'react';
 import { User, DesignRequest, RequestStatus, Message, Banner, SupportSession, ChatMessage } from '../types';
 import { requestService, authService, notificationService, announcementService, supportService, systemService } from '../services/mockDb';
-import { ShieldCheck, Package, MessageSquare, Users, Layout, Clock, CheckCircle2, Loader2, XCircle, Trash2, Eye, EyeOff, Plus, Activity, Upload, Lock, Unlock, UserPlus, Megaphone, Send, Headphones, AlertTriangle } from 'lucide-react';
+import { ShieldCheck, Package, MessageSquare, Users, Layout, Clock, CheckCircle2, Loader2, XCircle, Trash2, Eye, EyeOff, Plus, Activity, Upload, Lock, Unlock, UserPlus, Megaphone, Send, Headphones, AlertTriangle, ArrowRightCircle } from 'lucide-react';
 import { Button } from './Button';
 
 interface AdminDashboardProps {
@@ -103,6 +104,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     }
   };
 
+  const handleAcceptChat = async (sessionId: string) => {
+    try {
+      await supportService.acceptSession(sessionId, user.id);
+      setActiveChatId(sessionId); // Open the chat immediately
+    } catch (e) {
+      console.error("Error accepting chat", e);
+    }
+  };
+
   const handleEndChat = async (sessionId: string) => {
     if (window.confirm("هل أنت متأكد من إنهاء هذه المحادثة؟")) {
       // إغلاق فوري للواجهة (Optimistic Update)
@@ -131,7 +141,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
       switch (newStatus) {
         case 'PENDING': // Or conceptually "Received"
-           // This case is usually set on creation, but if admin resets it:
            title = 'تحديث حالة الطلب';
            msg = 'تم استلام طلبكم وهو حالياً قيد الانتظار.';
            type = 'info';
@@ -307,6 +316,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     }
   };
 
+  // Filter sessions
+  const incomingSessions = supportSessions.filter(s => s.status === 'WAITING');
+  const myActiveSessions = supportSessions.filter(s => s.status === 'ACTIVE');
+
   const adminUsers = users.filter(u => u.role === 'ADMIN');
 
   return (
@@ -368,7 +381,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                 <Headphones size={20} className={activeTab === 'LIVE_SUPPORT' ? 'animate-pulse' : ''} />
                 <span>الدعم المباشر</span>
               </div>
-              {supportSessions.length > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{supportSessions.length}</span>}
+              {incomingSessions.length > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">{incomingSessions.length}</span>}
             </button>
 
             <button
@@ -450,14 +463,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           {activeTab === 'LIVE_SUPPORT' && (
             <div className="h-full flex flex-col md:flex-row">
                {/* Sessions List */}
-               <div className="w-full md:w-80 border-l border-slate-200 dark:border-white/10 overflow-y-auto bg-white dark:bg-black/20">
-                  <div className="p-4 border-b border-slate-200 dark:border-white/10">
-                     <h3 className="font-bold text-slate-700 dark:text-white">المحادثات النشطة</h3>
+               <div className="w-full md:w-80 border-l border-slate-200 dark:border-white/10 overflow-y-auto bg-white dark:bg-black/20 flex flex-col">
+                  
+                  {/* Incoming Requests Section */}
+                  {incomingSessions.length > 0 && (
+                    <div className="border-b border-slate-200 dark:border-white/10">
+                      <div className="p-4 bg-red-50 dark:bg-red-900/10">
+                         <h3 className="font-bold text-red-600 dark:text-red-400 text-sm flex items-center gap-2">
+                            <Activity size={16} className="animate-pulse" />
+                            طلبات واردة ({incomingSessions.length})
+                         </h3>
+                      </div>
+                      {incomingSessions.map(session => (
+                         <div key={session.id} className="p-4 border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-white/10 flex items-center justify-center text-slate-600 dark:text-white font-bold">
+                                 {session.userName.charAt(0).toUpperCase()}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                 <div className="font-bold text-slate-800 dark:text-white text-sm truncate">{session.userName}</div>
+                                 <div className="text-xs text-slate-400">ينتظر التوصيل...</div>
+                              </div>
+                            </div>
+                            <Button 
+                              onClick={() => handleAcceptChat(session.id)}
+                              className="w-full !py-2 !text-xs bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-500/20"
+                            >
+                               قبول المحادثة
+                            </Button>
+                         </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="p-4 bg-slate-100 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
+                     <h3 className="font-bold text-slate-700 dark:text-white text-sm">محادثاتي النشطة</h3>
                   </div>
-                  {supportSessions.length === 0 ? (
-                    <div className="p-6 text-center text-slate-400 text-sm">لا توجد محادثات نشطة حالياً</div>
+                  
+                  {myActiveSessions.length === 0 ? (
+                    <div className="p-6 text-center text-slate-400 text-sm flex-1 flex flex-col items-center justify-center gap-2">
+                       <Headphones size={24} className="opacity-20" />
+                       لا توجد محادثات نشطة
+                    </div>
                   ) : (
-                    supportSessions.map(session => (
+                    myActiveSessions.map(session => (
                        <button
                          key={session.id}
                          onClick={() => setActiveChatId(session.id)}
@@ -472,6 +521,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                                {new Date(session.lastMessageAt).toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}
                              </div>
                           </div>
+                          {activeChatId === session.id && <ArrowRightCircle size={16} className="text-indigo-500" />}
                        </button>
                     ))
                   )}
@@ -527,13 +577,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   ) : (
                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
                         <Headphones size={48} className="mb-4 opacity-20" />
-                        <p>اختر محادثة من القائمة للبدء</p>
+                        <p>اختر محادثة من القائمة للبدء أو اقبل طلب جديد</p>
                      </div>
                   )}
                </div>
             </div>
           )}
 
+          {/* ... Other Tabs remain identical ... */}
+          
           {/* --- REQUESTS TAB --- */}
           {activeTab === 'REQUESTS' && (
             <div className="p-4 md:p-8">

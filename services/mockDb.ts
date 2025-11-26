@@ -1,4 +1,5 @@
 
+
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { 
   getAuth, 
@@ -393,12 +394,11 @@ export const announcementService = {
   getReadIds: (userId: string, callback: (readIds: Set<string>) => void) => {
     const q = query(collection(db, "announcement_reads"), where("userId", "==", userId));
     return onSnapshot(q, (snapshot) => {
-      const ids = new Set();
+      const ids = new Set(); // Standard JS Set
       snapshot.docs.forEach(doc => {
         ids.add(doc.data().announcementId);
       });
-      // @ts-ignore
-      callback(ids);
+      callback(ids as Set<string>);
     });
   }
 };
@@ -407,10 +407,11 @@ export const announcementService = {
 
 export const supportService = {
   getUserActiveSession: (userId: string, callback: (sessionId: string | null) => void) => {
+    // Check for either WAITING or ACTIVE status
     const q = query(
       collection(db, "support_sessions"), 
       where("userId", "==", userId),
-      where("status", "==", "OPEN")
+      where("status", "in", ["WAITING", "ACTIVE"]) 
     );
     
     return onSnapshot(q, (snapshot) => {
@@ -423,16 +424,12 @@ export const supportService = {
   },
 
   createSession: async (userId: string, userName: string) => {
-    // Load Balancing Logic: Find Admin with least active sessions
-    // For simplicity, we assign randomly or to first available. 
-    // Ideally: Fetch all admins, check their active session count.
-    
-    // Create Session
+    // Create Session - Initial state is WAITING with no admin assigned
     const newSession: Omit<SupportSession, 'id'> = {
       userId,
       userName,
-      adminId: null, // Can be assigned later or auto-assigned
-      status: 'OPEN',
+      adminId: null, // No admin yet
+      status: 'WAITING',
       lastMessageAt: new Date().toISOString(),
       unreadByUser: 0,
       unreadByAdmin: 1
@@ -440,6 +437,14 @@ export const supportService = {
     
     const docRef = await addDoc(collection(db, "support_sessions"), newSession);
     return docRef.id;
+  },
+
+  // New function to claim a chat
+  acceptSession: async (sessionId: string, adminId: string) => {
+    await updateDoc(doc(db, "support_sessions", sessionId), { 
+      status: 'ACTIVE',
+      adminId: adminId
+    });
   },
 
   endSession: async (sessionId: string) => {
@@ -469,12 +474,30 @@ export const supportService = {
   },
 
   getAdminSessions: (adminUser: User, callback: (sessions: SupportSession[]) => void) => {
-    // Super admin sees all, regular admin sees theirs or unassigned
-    // For now, simpler: show all OPEN sessions
-    const q = query(collection(db, "support_sessions"), where("status", "==", "OPEN"), orderBy("lastMessageAt", "desc"));
+    // We want to fetch WAITING sessions (for everyone) AND ACTIVE sessions (only for this admin)
+    // To avoid index errors, we'll fetch all non-closed sessions and filter in JS
+    // This is safer given the "Index" issues we've had.
+    
+    const q = query(collection(db, "support_sessions")); // Fetch all, filter below
+    
     return onSnapshot(q, (snapshot) => {
-      const sessions = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as SupportSession));
-      callback(sessions);
+      const allSessions = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as SupportSession));
+      
+      const filteredSessions = allSessions.filter(session => {
+        // 1. Waiting sessions (Visible to all admins)
+        if (session.status === 'WAITING') return true;
+        
+        // 2. Active sessions (Visible ONLY to the assigned admin OR Super Admin for oversight)
+        if (session.status === 'ACTIVE') {
+          return session.adminId === adminUser.id || adminUser.email === 'filex@flexdesign.academy';
+        }
+
+        return false;
+      });
+
+      // Sort by lastMessageAt descending (newest first)
+      filteredSessions.sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+      callback(filteredSessions);
     });
   }
 };
@@ -501,11 +524,6 @@ export const systemService = {
       snapshot.docs.forEach((doc) => {
         batch.delete(doc.ref);
       });
-      
-      // Also clear subcollections if possible (requires recursive deletion or specific knowledge)
-      // For support sessions, we need to clear messages. 
-      // Firestore batch delete doesn't auto-delete subcollections. 
-      // We will leave subcollections for now or handle them if critical.
     }
 
     await batch.commit();

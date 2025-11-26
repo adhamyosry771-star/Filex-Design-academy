@@ -87,8 +87,8 @@ export interface SupportSession {
   id: string;
   userId: string;
   userName: string;
-  adminId: string | null; // Assigned Admin
-  status: 'OPEN' | 'CLOSED';
+  adminId: string | null; // Null when WAITING
+  status: 'WAITING' | 'ACTIVE' | 'CLOSED'; // Updated Statuses
   lastMessageAt: string;
   unreadByUser: number;
   unreadByAdmin: number;

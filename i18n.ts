@@ -1,4 +1,5 @@
 
+
 import { Language } from './types';
 
 export const translations = {
@@ -140,7 +141,8 @@ export const translations = {
         pricing: 'تختلف الأسعار حسب نوع المشروع. الشعارات تبدأ من 50$، الهوية الكاملة من 200$. يمكنك الاطلاع على التفاصيل في صفحة طلب التصميم.',
         services: 'نقدم خدمات: تصميم الشعارات، الهوية البصرية، واجهات المواقع (UI/UX)، ومنتجات الوكالات الصوتية.',
         humanErr: 'يجب تسجيل الدخول أولاً للتحدث مع ممثل خدمة العملاء.',
-        welcome: 'مرحباً بك في فليكس ديزاين! 👋 أنا المساعد الذكي، كيف يمكنني مساعدتك اليوم؟'
+        welcome: 'مرحباً بك في فليكس ديزاين! 👋 أنا المساعد الذكي، كيف يمكنني مساعدتك اليوم؟',
+        connectMsg: 'برجاء الانتظار سوف يرد عليك احد ممثلي خدمة العملاء الان'
       }
     },
     success: {
@@ -300,7 +302,8 @@ export const translations = {
         pricing: 'Prices vary by project type. Logos start from $50, Full Branding from $200. Check the Request Design page for details.',
         services: 'We offer: Logo Design, Visual Identity, UI/UX, and Voice Agency products.',
         humanErr: 'You must login first to talk to a customer service agent.',
-        welcome: 'Welcome to Flex Design! 👋 I am the AI Assistant, how can I help you today?'
+        welcome: 'Welcome to Flex Design! 👋 I am the AI Assistant, how can I help you today?',
+        connectMsg: 'Please wait, a customer service representative will reply to you now.'
       }
     },
     success: {
@@ -460,7 +463,8 @@ export const translations = {
         pricing: 'Les prix varient selon le type. Logos à partir de 50$, Branding complet à partir de 200$. Voir la page de demande.',
         services: 'Nous proposons : Création de Logo, Identité Visuelle, UI/UX et produits pour agences vocales.',
         humanErr: 'Vous devez d\'abord vous connecter pour parler à un agent.',
-        welcome: 'Bienvenue chez Flex Design ! 👋 Je suis l\'Assistant IA, comment puis-je vous aider ?'
+        welcome: 'Bienvenue chez Flex Design ! 👋 Je suis l\'Assistant IA, comment puis-je vous aider ?',
+        connectMsg: 'Veuillez patienter, un représentant du service client va vous répondre maintenant.'
       }
     },
     success: {

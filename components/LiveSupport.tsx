@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, ChatMessage } from '../types';
 import { supportService } from '../services/mockDb';
@@ -87,6 +88,13 @@ export const LiveSupport: React.FC<LiveSupportProps> = ({ user, t }) => {
          setMessages(prev => [...prev, { ...userMsg, id: 'bot-err', senderId: 'bot', senderName: 'Bot', text: t.botResponses.humanErr, isAdmin: true }]);
          return;
        }
+       
+       // Show the waiting message immediately
+       userMsg.text = t.botOptions.human;
+       botResponseText = t.botResponses.connectMsg; // "برجاء الانتظار..."
+       setMessages(prev => [...prev, userMsg, { ...userMsg, id: 'bot-'+Date.now(), senderId: 'bot', senderName: 'Bot', text: botResponseText, isAdmin: true }]);
+       setTimeout(scrollToBottom, 100);
+
        setIsBotMode(false);
        setIsLoading(true);
        try {

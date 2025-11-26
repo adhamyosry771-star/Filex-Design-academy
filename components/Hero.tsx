@@ -107,7 +107,7 @@ export const Hero: React.FC<HeroProps> = ({ onStart, onServiceClick, t, language
             <span>{t.badge}</span>
           </div>
 
-          <div className="flex flex-col items-center justify-center gap-12 w-full">
+          <div className="flex flex-col items-center justify-center gap-8 w-full">
             
             {/* Top Content: Text & Buttons */}
             <div className="text-center animate-fade-in-up">
@@ -153,7 +153,7 @@ export const Hero: React.FC<HeroProps> = ({ onStart, onServiceClick, t, language
                   {/* Inner Image */}
                   <img 
                     src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" 
-                    alt="Abstract 5D Art" 
+                    alt="Abstract Art" 
                     className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 ease-in-out mix-blend-overlay"
                   />
                   
@@ -171,11 +171,12 @@ export const Hero: React.FC<HeroProps> = ({ onStart, onServiceClick, t, language
                 </div>
               </div>
             </div>
+
+            {/* Banner Carousel - Positioned BELOW the Glass Frame */}
+            <BannerCarousel />
+
           </div>
         </div>
-
-        {/* Banner Carousel Section */}
-        <BannerCarousel />
 
         {/* Services Grid with 3D Interaction */}
         <div className="mt-20 relative z-10" id="services">
