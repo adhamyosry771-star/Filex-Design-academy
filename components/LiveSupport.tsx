@@ -17,7 +17,7 @@ export const LiveSupport: React.FC<LiveSupportProps> = ({ user, t }) => {
   const [input, setInput] = useState('');
   const [isBotMode, setIsBotMode] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const [isSessionClosed, setIsSessionClosed] = useState(false);
   
   // Bot predefined flows - Translatable via props mapping
@@ -61,7 +61,10 @@ export const LiveSupport: React.FC<LiveSupportProps> = ({ user, t }) => {
   }, [activeSessionId]);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (chatContainerRef.current) {
+      const { scrollHeight, clientHeight } = chatContainerRef.current;
+      chatContainerRef.current.scrollTo({ top: scrollHeight - clientHeight, behavior: 'smooth' });
+    }
   };
 
   const handleBotOption = async (optionId: string) => {
@@ -187,7 +190,7 @@ export const LiveSupport: React.FC<LiveSupportProps> = ({ user, t }) => {
         ) : (
           <>
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50 dark:bg-[#0f172a]/40">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50 dark:bg-[#0f172a]/40" ref={chatContainerRef}>
               {isLoading && (
                  <div className="flex justify-center py-4">
                     <Loader2 className="animate-spin text-primary" size={32} />
@@ -228,7 +231,6 @@ export const LiveSupport: React.FC<LiveSupportProps> = ({ user, t }) => {
                    ))}
                  </div>
                )}
-               <div ref={messagesEndRef} />
             </div>
 
             {/* Input Area */}

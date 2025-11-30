@@ -1,9 +1,10 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { ArrowLeft, ArrowRight, Sparkles, Layout, Video, Palette, Share2, Mic } from 'lucide-react';
 import { BannerCarousel } from './BannerCarousel';
-import { Language, ProjectType } from '../types';
+import { Language, ProjectType, Banner } from '../types';
+import { requestService } from '../services/mockDb';
 
 interface HeroProps {
   onStart: () => void;
@@ -15,6 +16,34 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ onStart, onServiceClick, t, language }) => {
   const Arrow = language === 'ar' ? ArrowLeft : ArrowRight;
   const [activeCard, setActiveCard] = useState<number | null>(null);
+  
+  // State for Banners in the Hero Frame
+  const [heroBanners, setHeroBanners] = useState<Banner[]>([]);
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+
+  // Fetch Banners
+  useEffect(() => {
+    const fetchBanners = async () => {
+      try {
+        const data = await requestService.getBanners(true);
+        setHeroBanners(data);
+      } catch (error) {
+        console.error("Error fetching banners for hero:", error);
+      }
+    };
+    fetchBanners();
+  }, []);
+
+  // Slideshow Logic (Smooth Cross-fade)
+  useEffect(() => {
+    if (heroBanners.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCurrentBannerIndex((prev) => (prev + 1) % heroBanners.length);
+    }, 5000); // Change every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [heroBanners]);
 
   const handleCardClick = (index: number, type: ProjectType) => {
     setActiveCard(index);
@@ -141,39 +170,64 @@ export const Hero: React.FC<HeroProps> = ({ onStart, onServiceClick, t, language
               </div>
             </div>
 
-            {/* Bottom Content: Floating Glass Frame */}
-            <div className="relative w-full max-w-sm">
-              <div className="relative w-full aspect-[4/3] animate-float">
-                {/* Outer Glow Ring */}
-                <div className="absolute -inset-4 bg-gradient-to-r from-primary to-secondary rounded-full opacity-20 blur-2xl animate-pulse-slow"></div>
-                
-                {/* The Glass Card */}
-                <div className="absolute inset-0 bg-white/10 dark:bg-white/5 backdrop-blur-lg rounded-[2rem] border-[6px] border-white/20 dark:border-white/10 shadow-[inset_0_0_20px_rgba(255,255,255,0.1)] overflow-hidden group">
-                  
-                  {/* Inner Image */}
-                  <img 
-                    src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop" 
-                    alt="Abstract Art" 
-                    className="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-110 transition-all duration-700 ease-in-out mix-blend-overlay"
-                  />
-                  
-                  {/* Decorative Elements on the Glass */}
-                  <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-tr from-white/10 to-transparent pointer-events-none"></div>
-                  <div className="absolute bottom-0 w-full p-6 bg-gradient-to-t from-black/80 to-transparent">
-                     <div className="flex items-center gap-3 mb-2">
-                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                        <span className="text-white/80 text-xs font-mono tracking-widest">SYSTEM ONLINE</span>
-                     </div>
-                     <div className="h-1 w-full bg-white/20 rounded-full overflow-hidden">
-                        <div className="h-full w-2/3 bg-primary animate-pulse"></div>
+            {/* Bottom Content: Floating Glass Frame (Specific System Online Design) */}
+            {/* This frame now displays images from the Admin Banners system */}
+            <div className="relative w-full max-w-sm mt-8 mb-8 animate-float">
+               <div className="bg-[#1a1a2e]/90 backdrop-blur-xl border border-white/10 rounded-[2.5rem] p-3 shadow-2xl relative overflow-hidden group">
+                  {/* Image Container */}
+                  <div className="relative aspect-[16/10] rounded-[2rem] overflow-hidden bg-black/50">
+                     
+                     {/* Multiple Banners Cross-fade */}
+                     {heroBanners.length > 0 ? (
+                        heroBanners.map((banner, index) => (
+                          <img 
+                            key={banner.id}
+                            src={banner.imageUrl} 
+                            alt="System Preview" 
+                            className={`absolute inset-0 w-full h-full object-cover transition-all duration-1000 ease-in-out ${
+                              index === currentBannerIndex 
+                                ? 'opacity-100 scale-100 z-10' 
+                                : 'opacity-0 scale-110 z-0'
+                            }`}
+                          />
+                        ))
+                     ) : (
+                        <img 
+                          src="https://i.ibb.co/xSw4nC6h/35495.jpg"
+                          alt="Default Preview"
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop";
+                          }}
+                        />
+                     )}
+
+                     {/* Overlay Gradient */}
+                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-20 pointer-events-none"></div>
+                     
+                     {/* System UI Overlay */}
+                     <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between z-30 pointer-events-none">
+                        <div className="h-1.5 flex-1 bg-white/20 rounded-full overflow-hidden mr-4">
+                           <div className="h-full w-2/3 bg-indigo-500 rounded-full animate-pulse"></div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <span className="text-[10px] font-mono text-white/80 tracking-widest">SYSTEM ONLINE</span>
+                           <div className="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_8px_rgba(74,222,128,0.8)] animate-pulse"></div>
+                        </div>
                      </div>
                   </div>
-                </div>
-              </div>
+                  
+                  {/* Decorative Elements */}
+                  <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+                  <div className="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent"></div>
+               </div>
+               
+               {/* Ambient Glow Behind Card */}
+               <div className="absolute -inset-4 bg-indigo-600/20 blur-3xl rounded-full -z-10 animate-pulse-slow"></div>
             </div>
 
-            {/* Banner Carousel - Positioned BELOW the Glass Frame */}
-            <BannerCarousel />
+            {/* Banner Carousel - Also displaying below as requested in previous steps (can be removed if redundant) */}
+            <BannerCarousel emptyMsg={t.noBanners} />
 
           </div>
         </div>

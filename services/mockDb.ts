@@ -23,7 +23,9 @@ import {
   deleteDoc,
   orderBy,
   onSnapshot,
-  writeBatch
+  writeBatch,
+  limit,
+  increment
 } from 'firebase/firestore';
 import { 
   getStorage, 
@@ -31,7 +33,7 @@ import {
   uploadBytes, 
   getDownloadURL 
 } from 'firebase/storage';
-import { User, DesignRequest, RequestStatus, Message, Banner, Notification, Announcement, SupportSession, ChatMessage } from '../types';
+import { User, DesignRequest, RequestStatus, Message, Banner, Notification, Announcement, SupportSession, ChatMessage, AdminGroupMessage, Visitor } from '../types';
 import { firebaseConfig } from '../firebaseConfig';
 
 // Initialize Firebase
@@ -310,6 +312,54 @@ export const requestService = {
 
   toggleBannerStatus: async (id: string, currentStatus: boolean) => {
     await updateDoc(doc(db, "banners", id), { isActive: !currentStatus });
+  },
+
+  // --- Visitor Tracking Service ---
+  trackVisitor: async () => {
+    try {
+      // 1. Get or Create Device ID in LocalStorage
+      let deviceId = localStorage.getItem('flex_visitor_id');
+      if (!deviceId) {
+        deviceId = crypto.randomUUID();
+        localStorage.setItem('flex_visitor_id', deviceId);
+      }
+
+      // 2. Check if visitor exists in Firestore
+      const visitorRef = doc(db, "visitors", deviceId);
+      const visitorDoc = await getDoc(visitorRef);
+
+      const timestamp = new Date().toISOString();
+      const userAgent = navigator.userAgent;
+
+      if (visitorDoc.exists()) {
+        // Update existing visitor
+        await updateDoc(visitorRef, {
+          lastVisit: timestamp,
+          visitCount: increment(1),
+          userAgent: userAgent // Update UA in case they switched browser versions
+        });
+      } else {
+        // Create new visitor
+        const newVisitor: Visitor = {
+          id: deviceId,
+          deviceId: deviceId,
+          userAgent: userAgent,
+          firstVisit: timestamp,
+          lastVisit: timestamp,
+          visitCount: 1,
+          isRegistered: false
+        };
+        await setDoc(visitorRef, newVisitor);
+      }
+    } catch (e) {
+      console.error("Tracking error", e);
+    }
+  },
+
+  getVisitors: async (): Promise<Visitor[]> => {
+    const q = query(collection(db, "visitors"), orderBy("lastVisit", "desc"), limit(100));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Visitor));
   }
 };
 
@@ -394,11 +444,11 @@ export const announcementService = {
   getReadIds: (userId: string, callback: (readIds: Set<string>) => void) => {
     const q = query(collection(db, "announcement_reads"), where("userId", "==", userId));
     return onSnapshot(q, (snapshot) => {
-      const ids = new Set(); // Standard JS Set
+      const ids = new Set<string>(); // Standard JS Set
       snapshot.docs.forEach(doc => {
         ids.add(doc.data().announcementId);
       });
-      callback(ids as Set<string>);
+      callback(ids);
     });
   }
 };
@@ -476,7 +526,6 @@ export const supportService = {
   getAdminSessions: (adminUser: User, callback: (sessions: SupportSession[]) => void) => {
     // We want to fetch WAITING sessions (for everyone) AND ACTIVE sessions (only for this admin)
     // To avoid index errors, we'll fetch all non-closed sessions and filter in JS
-    // This is safer given the "Index" issues we've had.
     
     const q = query(collection(db, "support_sessions")); // Fetch all, filter below
     
@@ -502,6 +551,60 @@ export const supportService = {
   }
 };
 
+// --- Admin Group Chat Service ---
+
+export const adminChatService = {
+  sendMessage: async (senderId: string, senderName: string, text: string) => {
+    await addDoc(collection(db, "admin_group_chat"), {
+      senderId,
+      senderName,
+      text,
+      timestamp: new Date().toISOString()
+    });
+  },
+
+  getMessages: (callback: (messages: AdminGroupMessage[]) => void) => {
+    // Fetch last 50 messages to keep it performant
+    const q = query(collection(db, "admin_group_chat"), orderBy("timestamp", "asc")); 
+    
+    return onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as AdminGroupMessage));
+      // Client side sort just in case
+      msgs.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      callback(msgs);
+    });
+  },
+
+  // Track the last time a user opened the chat to calculate unread counts
+  markAsRead: async (userId: string) => {
+    const userReadRef = doc(db, "admin_chat_reads", userId);
+    await setDoc(userReadRef, { lastReadAt: new Date().toISOString() });
+  },
+
+  getUnreadCount: (userId: string, callback: (count: number) => void) => {
+    // Listen to the user's last read time
+    const userReadRef = doc(db, "admin_chat_reads", userId);
+    
+    // We also need to listen to the *latest* message to update the count in real-time
+    // This is a simplified approach: Listen to all messages, and compare with lastReadAt
+    
+    const unsubscribeMessages = onSnapshot(query(collection(db, "admin_group_chat")), (msgsSnapshot) => {
+      const messages = msgsSnapshot.docs.map(d => d.data() as AdminGroupMessage);
+      
+      // Get the last read time (fetch once or listen)
+      getDoc(userReadRef).then(readDoc => {
+        const lastReadAt = readDoc.exists() ? readDoc.data().lastReadAt : new Date(0).toISOString();
+        
+        // Count messages newer than lastReadAt
+        const unread = messages.filter(m => m.timestamp > lastReadAt && m.senderId !== userId).length;
+        callback(unread);
+      });
+    });
+
+    return unsubscribeMessages;
+  }
+};
+
 // --- System Service (Reset & Maintenance) ---
 
 export const systemService = {
@@ -514,7 +617,10 @@ export const systemService = {
       'announcements',
       'announcement_reads',
       'banners',
-      'support_sessions'
+      'support_sessions',
+      'admin_group_chat',
+      'admin_chat_reads',
+      'visitors' // Also clear visitors history
     ];
 
     for (const colName of collectionsToClear) {

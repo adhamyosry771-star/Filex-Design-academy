@@ -4,7 +4,11 @@ import { Banner } from '../types';
 import { requestService } from '../services/mockDb';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 
-export const BannerCarousel: React.FC = () => {
+interface BannerCarouselProps {
+  emptyMsg?: string;
+}
+
+export const BannerCarousel: React.FC<BannerCarouselProps> = ({ emptyMsg }) => {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [touchStart, setTouchStart] = useState(0);
@@ -80,7 +84,13 @@ export const BannerCarousel: React.FC = () => {
     startTimer();
   };
 
-  if (banners.length === 0) return null;
+  if (banners.length === 0) {
+    if (emptyMsg) {
+       // Optional: Display placeholder if no banners
+       return null; 
+    }
+    return null;
+  }
 
   return (
     <div 

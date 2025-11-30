@@ -1,31 +1,45 @@
 
-
 import React, { useEffect, useState, useRef } from 'react';
-import { User, DesignRequest, RequestStatus, Message, Banner, SupportSession, ChatMessage } from '../types';
-import { requestService, authService, notificationService, announcementService, supportService, systemService } from '../services/mockDb';
-import { ShieldCheck, Package, MessageSquare, Users, Layout, Clock, CheckCircle2, Loader2, XCircle, Trash2, Eye, EyeOff, Plus, Activity, Upload, Lock, Unlock, UserPlus, Megaphone, Send, Headphones, AlertTriangle, ArrowRightCircle } from 'lucide-react';
+import { User, DesignRequest, RequestStatus, Message, Banner, SupportSession, ChatMessage, AdminGroupMessage, Language, Visitor } from '../types';
+import { requestService, authService, notificationService, announcementService, supportService, systemService, adminChatService } from '../services/mockDb';
+import { ShieldCheck, Package, MessageSquare, Users, Layout, Clock, CheckCircle2, Loader2, XCircle, Trash2, Eye, EyeOff, Plus, Activity, Upload, Lock, Unlock, UserPlus, Megaphone, Send, Headphones, AlertTriangle, ArrowRightCircle, MessageCircle, Footprints } from 'lucide-react';
 import { Button } from './Button';
 
 interface AdminDashboardProps {
   user: User;
+  t: any;
+  language: Language;
 }
 
-type TabType = 'REQUESTS' | 'MESSAGES' | 'USERS' | 'BANNERS' | 'ADMINS' | 'OFFICIAL_MESSAGES' | 'LIVE_SUPPORT';
+type TabType = 'REQUESTS' | 'MESSAGES' | 'USERS' | 'BANNERS' | 'ADMINS' | 'OFFICIAL_MESSAGES' | 'LIVE_SUPPORT' | 'ADMIN_CHAT' | 'VISITORS';
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, t, language }) => {
   const [activeTab, setActiveTab] = useState<TabType>('REQUESTS');
   const [requests, setRequests] = useState<DesignRequest[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [banners, setBanners] = useState<Banner[]>([]);
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Fake Stats Booster State (For Demo/Sale purposes)
+  const [fakeStatsActive, setFakeStatsActive] = useState(true);
+  const FAKE_USERS_COUNT = 13289;
+  const FAKE_REQUESTS_COUNT = 567;
+  const FAKE_MESSAGES_COUNT = 190;
 
   // Live Support State
   const [supportSessions, setSupportSessions] = useState<SupportSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [adminChatInput, setAdminChatInput] = useState('');
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const activeChatContainerRef = useRef<HTMLDivElement>(null);
+
+  // Admin Group Chat State
+  const [groupMessages, setGroupMessages] = useState<AdminGroupMessage[]>([]);
+  const [groupChatInput, setGroupChatInput] = useState('');
+  const [unreadGroupMessages, setUnreadGroupMessages] = useState(0);
+  const groupChatContainerRef = useRef<HTMLDivElement>(null);
 
   // New Banner State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -52,17 +66,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [allRequests, allMessages, allUsers, allBanners] = await Promise.all([
+      const [allRequests, allMessages, allUsers, allBanners, allVisitors] = await Promise.all([
         requestService.getAllRequests(),
         requestService.getMessages(),
         authService.getAllUsers(),
-        requestService.getBanners(false)
+        requestService.getBanners(false),
+        requestService.getVisitors()
       ]);
       
       setRequests(allRequests);
       setMessages(allMessages);
       setUsers(allUsers);
       setBanners(allBanners);
+      setVisitors(allVisitors);
     } catch (e) {
       console.error("Admin fetch error", e);
     } finally {
@@ -87,11 +103,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     if (activeChatId) {
       const unsub = supportService.getMessages(activeChatId, (msgs) => {
         setChatMessages(msgs);
-        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
       });
       return () => unsub();
     }
   }, [activeChatId]);
+
+  // Auto-scroll for Active Live Chat
+  useEffect(() => {
+    if (activeChatContainerRef.current) {
+      activeChatContainerRef.current.scrollTop = activeChatContainerRef.current.scrollHeight;
+    }
+  }, [chatMessages, activeChatId]);
+
+  // --- Admin Group Chat Logic ---
+  
+  // 1. Listen for unread count globally
+  useEffect(() => {
+    const unsub = adminChatService.getUnreadCount(user.id, (count) => {
+      // Only show badge if we are NOT currently in the chat tab
+      if (activeTab !== 'ADMIN_CHAT') {
+        setUnreadGroupMessages(count);
+      } else {
+        // If we ARE in the tab, ensure count stays 0 and mark read
+        setUnreadGroupMessages(0);
+        adminChatService.markAsRead(user.id);
+      }
+    });
+    return () => unsub();
+  }, [user.id, activeTab]);
+
+  // 2. Listen for messages when tab is active
+  useEffect(() => {
+    if (activeTab === 'ADMIN_CHAT') {
+      const unsub = adminChatService.getMessages((msgs) => {
+        setGroupMessages(msgs);
+      });
+      // Mark as read immediately when entering
+      adminChatService.markAsRead(user.id);
+      return () => unsub();
+    }
+  }, [activeTab, user.id]);
+
+  // Auto-scroll for Group Chat
+  useEffect(() => {
+    if (activeTab === 'ADMIN_CHAT' && groupChatContainerRef.current) {
+      groupChatContainerRef.current.scrollTop = groupChatContainerRef.current.scrollHeight;
+    }
+  }, [groupMessages, activeTab]);
+
+  const handleSendGroupMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!groupChatInput.trim()) return;
+    
+    try {
+      await adminChatService.sendMessage(user.id, user.name, groupChatInput);
+      setGroupChatInput('');
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleAdminSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +184,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   };
 
   const handleEndChat = async (sessionId: string) => {
-    if (window.confirm("هل أنت متأكد من إنهاء هذه المحادثة؟")) {
+    if (window.confirm(t.chat.confirmEnd)) {
       // إغلاق فوري للواجهة (Optimistic Update)
       if (activeChatId === sessionId) {
          setActiveChatId(null);
@@ -133,36 +203,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   const handleStatusChange = async (requestId: string, userId: string | undefined, newStatus: RequestStatus) => {
     await requestService.updateRequestStatus(requestId, newStatus);
     
-    // إرسال إشعار للمستخدم بالنصوص المخصصة المطلوبة
+    // إرسال إشعار للمستخدم
     if (userId) {
-      let title = '';
+      let title = t.requests.title;
       let msg = '';
       let type: 'info' | 'success' | 'warning' | 'error' = 'info';
 
       switch (newStatus) {
-        case 'PENDING': // Or conceptually "Received"
-           title = 'تحديث حالة الطلب';
-           msg = 'تم استلام طلبكم وهو حالياً قيد الانتظار.';
+        case 'PENDING':
+           msg = t.requests.notifications.pending;
            type = 'info';
            break;
         case 'IN_PROGRESS':
-          title = 'تحديث حالة الطلب';
-          msg = 'جاري العمل على طلبكم الآن.';
+          msg = t.requests.notifications.inProgress;
           type = 'info';
           break;
         case 'COMPLETED':
-          title = 'مبروك!';
-          msg = 'تم الانتهاء من الطلب الخاص بكم بنجاح.';
+          msg = t.requests.notifications.completed;
           type = 'success';
           break;
         case 'REJECTED':
-          title = 'تحديث حالة الطلب';
-          msg = 'تم رفض الطلب الخاص بكم.';
+          msg = t.requests.notifications.rejected;
           type = 'error';
           break;
       }
       
-      if (title) {
+      if (msg) {
         await notificationService.createNotification(userId, title, msg, type);
       }
     }
@@ -171,15 +237,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (window.confirm("هل أنت متأكد من حذف هذا المستخدم؟ هذا الإجراء لا يمكن التراجع عنه.")) {
+    if (window.confirm(t.users.confirmDelete)) {
       await authService.deleteUser(userId);
       fetchData();
     }
   };
 
   const handleToggleBanUser = async (userId: string, currentStatus?: 'ACTIVE' | 'BANNED') => {
-    const action = currentStatus === 'BANNED' ? 'فك حظر' : 'حظر';
-    if (window.confirm(`هل أنت متأكد من ${action} هذا المستخدم؟`)) {
+    if (window.confirm(t.users.confirmBan)) {
       await authService.toggleUserBan(userId, currentStatus);
       fetchData();
     }
@@ -207,10 +272,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       }
       
       await fetchData();
-      alert("تم نشر البنر بنجاح!");
+      alert(t.banners.success);
     } catch (error) {
       console.error("Error uploading banner", error);
-      alert(error instanceof Error ? error.message : "فشل رفع الصورة.");
+      alert(error instanceof Error ? error.message : "Upload failed.");
     } finally {
       setIsUploading(false);
     }
@@ -222,7 +287,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
   };
 
   const handleDeleteBanner = async (id: string) => {
-    if (window.confirm("حذف هذا البنر؟")) {
+    if (window.confirm(t.banners.deleteConfirm)) {
       await requestService.deleteBanner(id);
       fetchData();
     }
@@ -230,7 +295,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
 
   // Admin Management Functions
   const handleCreateDefaultAdmins = async () => {
-    if (!window.confirm("سيتم إنشاء 4 حسابات إدارية افتراضية. هل تريد المتابعة؟")) return;
+    if (!window.confirm("This will create 4 default admin accounts. Proceed?")) return;
     
     setIsCreatingAdmin(true);
     try {
@@ -245,10 +310,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         await authService.createAdminAccount(admin.name, admin.email, 'FlexAdmin2024');
       }
       
-      alert("تم إنشاء الحسابات بنجاح! كلمة المرور الموحدة هي: FlexAdmin2024");
+      alert("Admins created! Password: FlexAdmin2024");
       fetchData();
     } catch (error) {
-      alert("حدث خطأ أثناء الإنشاء. ربما الحسابات موجودة بالفعل.");
+      alert("Error creating admins.");
     } finally {
       setIsCreatingAdmin(false);
     }
@@ -259,13 +324,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     setIsCreatingAdmin(true);
     try {
       await authService.createAdminAccount(newAdminName, newAdminEmail, newAdminPassword);
-      alert("تم إنشاء المشرف بنجاح");
+      alert("Admin created successfully");
       setNewAdminName('');
       setNewAdminEmail('');
       setNewAdminPassword('');
       fetchData();
     } catch (error) {
-       alert("فشل إنشاء الحساب");
+       alert("Failed to create admin");
     } finally {
       setIsCreatingAdmin(false);
     }
@@ -278,30 +343,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     setIsSendingAnnouncement(true);
     try {
       await announcementService.createAnnouncement(announcementTitle, announcementBody, user.name);
-      alert("تم إرسال الرسالة الرسمية لجميع المستخدمين.");
+      alert(t.official.success);
       setAnnouncementTitle('');
       setAnnouncementBody('');
     } catch (error) {
-      alert("حدث خطأ أثناء الإرسال");
+      alert("Error sending announcement");
     } finally {
       setIsSendingAnnouncement(false);
     }
   };
   
   const handleSystemReset = async () => {
-    const confirm1 = window.confirm("⚠️ تحذير شديد الخطورة!\n\nهذا الإجراء سيقوم بحذف كافة:\n- الطلبات\n- الرسائل\n- المحادثات\n- الإشعارات\n\nلن تتأثر حسابات المستخدمين.\nهل أنت متأكد تماماً؟");
+    const confirm1 = window.confirm(t.admins.confirmReset1);
     if (!confirm1) return;
     
-    const confirm2 = window.confirm("هل أنت متأكد؟ هذا الإجراء لا يمكن التراجع عنه مطلقاً وسيتم مسح البيانات فوراً.");
+    const confirm2 = window.confirm(t.admins.confirmReset2);
     if (!confirm2) return;
 
     setIsResettingSystem(true);
     try {
       await systemService.resetAllSystemData();
-      alert("تم تصفير النظام بنجاح. الموقع جاهز الآن للانطلاق النظيف. 🚀");
+      
+      // *** MAGIC TRICK: Remove fake numbers on reset ***
+      setFakeStatsActive(false); 
+      
+      alert("System reset successful.");
       fetchData();
     } catch (e) {
-      alert("حدث خطأ أثناء التصفير. تأكد من صلاحياتك.");
+      alert("Reset failed.");
     } finally {
       setIsResettingSystem(false);
     }
@@ -316,6 +385,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
     }
   };
 
+  const getStatusLabel = (status: RequestStatus) => {
+    switch (status) {
+      case 'PENDING': return t.requests.statuses.PENDING;
+      case 'IN_PROGRESS': return t.requests.statuses.IN_PROGRESS;
+      case 'COMPLETED': return t.requests.statuses.COMPLETED;
+      case 'REJECTED': return t.requests.statuses.REJECTED;
+      default: return status;
+    }
+  };
+
+  const locale = language === 'ar' ? 'ar-EG' : 'en-US';
+
   // Filter sessions
   const incomingSessions = supportSessions.filter(s => s.status === 'WAITING');
   const myActiveSessions = supportSessions.filter(s => s.status === 'ACTIVE');
@@ -329,28 +410,37 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 flex items-center justify-between shadow-sm">
           <div>
-             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">المستخدمين</div>
-             <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{users.length}</div>
+             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">{t.stats.users}</div>
+             <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
+               {/* Display Fake Users + Real Users */}
+               {users.length + (fakeStatsActive ? FAKE_USERS_COUNT : 0)}
+             </div>
           </div>
           <div className="bg-indigo-100 dark:bg-indigo-500/20 p-3 rounded-xl text-indigo-600 dark:text-indigo-400"><Users size={24} /></div>
         </div>
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 flex items-center justify-between shadow-sm">
           <div>
-             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">الطلبات</div>
-             <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{requests.length}</div>
+             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">{t.stats.requests}</div>
+             <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
+               {/* Display Fake Requests + Real Requests */}
+               {requests.length + (fakeStatsActive ? FAKE_REQUESTS_COUNT : 0)}
+             </div>
           </div>
           <div className="bg-amber-100 dark:bg-amber-500/20 p-3 rounded-xl text-amber-600 dark:text-amber-400"><Package size={24} /></div>
         </div>
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 flex items-center justify-between shadow-sm">
           <div>
-             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">الرسائل</div>
-             <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{messages.length}</div>
+             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">{t.stats.messages}</div>
+             <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">
+                {/* Display Fake Messages + Real Messages */}
+                {messages.length + (fakeStatsActive ? FAKE_MESSAGES_COUNT : 0)}
+             </div>
           </div>
           <div className="bg-pink-100 dark:bg-pink-500/20 p-3 rounded-xl text-pink-600 dark:text-pink-400"><MessageSquare size={24} /></div>
         </div>
         <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 flex items-center justify-between shadow-sm">
           <div>
-             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">البنرات النشطة</div>
+             <div className="text-slate-500 dark:text-slate-400 text-sm font-semibold">{t.stats.activeBanners}</div>
              <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{banners.filter(b => b.isActive).length}</div>
           </div>
           <div className="bg-cyan-100 dark:bg-cyan-500/20 p-3 rounded-xl text-cyan-600 dark:text-cyan-400"><Layout size={24} /></div>
@@ -360,26 +450,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
       <div className="bg-white/80 dark:bg-white/5 backdrop-blur-xl rounded-3xl shadow-2xl border border-slate-200 dark:border-white/10 overflow-hidden min-h-[800px] flex flex-col lg:flex-row transition-colors duration-300">
         
         {/* Admin Sidebar */}
-        <div className="lg:w-72 bg-slate-100 dark:bg-[#050914]/50 border-l border-slate-200 dark:border-white/5 p-6 flex flex-col shrink-0">
+        <div className="lg:w-72 bg-slate-100 dark:bg-[#050914]/50 border-l ltr:border-l-0 ltr:border-r border-slate-200 dark:border-white/5 p-6 flex flex-col shrink-0">
           <div className="flex items-center gap-3 mb-10 px-2">
             <div className="w-12 h-12 bg-gradient-to-r from-amber-500 to-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-amber-500/20 shrink-0">
               <ShieldCheck size={24} />
             </div>
             <div>
-              <div className="font-bold text-slate-800 dark:text-white text-lg">لوحة المدير</div>
+              <div className="font-bold text-slate-800 dark:text-white text-lg">{t.sidebar.title}</div>
               <div className="text-xs text-amber-600 dark:text-amber-500 font-medium tracking-wider">ADMIN PANEL</div>
             </div>
           </div>
 
           <nav className="space-y-2 flex-1 overflow-x-auto lg:overflow-visible flex lg:block gap-2 pb-4 lg:pb-0">
+             
+             {/* Admin Group Chat Tab */}
+             <button
+              onClick={() => setActiveTab('ADMIN_CHAT')}
+              className={`w-full flex items-center whitespace-nowrap lg:whitespace-normal justify-between px-4 py-4 rounded-xl transition-all ${activeTab === 'ADMIN_CHAT' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'}`}
+            >
+              <div className="flex items-center gap-3">
+                <MessageCircle size={20} />
+                <span>{t.sidebar.groupChat}</span>
+              </div>
+              {unreadGroupMessages > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">{unreadGroupMessages}</span>}
+            </button>
+
              {/* Live Support Tab */}
              <button
               onClick={() => setActiveTab('LIVE_SUPPORT')}
-              className={`w-full flex items-center whitespace-nowrap lg:whitespace-normal justify-between px-4 py-4 rounded-xl transition-all ${activeTab === 'LIVE_SUPPORT' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'}`}
+              className={`w-full flex items-center whitespace-nowrap lg:whitespace-normal justify-between px-4 py-4 rounded-xl transition-all ${activeTab === 'LIVE_SUPPORT' ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white font-semibold shadow-sm border border-slate-200 dark:border-white/5' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'}`}
             >
               <div className="flex items-center gap-3">
                 <Headphones size={20} className={activeTab === 'LIVE_SUPPORT' ? 'animate-pulse' : ''} />
-                <span>الدعم المباشر</span>
+                <span>{t.sidebar.liveSupport}</span>
               </div>
               {incomingSessions.length > 0 && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full animate-pulse">{incomingSessions.length}</span>}
             </button>
@@ -390,7 +493,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             >
               <div className="flex items-center gap-3">
                 <Package size={20} />
-                <span>كل الطلبات</span>
+                <span>{t.sidebar.allRequests}</span>
+              </div>
+            </button>
+
+            {/* VISITORS BUTTON - Added above users */}
+            <button
+              onClick={() => setActiveTab('VISITORS')}
+              className={`w-full flex items-center whitespace-nowrap lg:whitespace-normal justify-between px-4 py-4 rounded-xl transition-all ${activeTab === 'VISITORS' ? 'bg-white dark:bg-white/10 text-slate-900 dark:text-white font-semibold shadow-sm border border-slate-200 dark:border-white/5' : 'text-slate-500 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white'}`}
+            >
+              <div className="flex items-center gap-3">
+                <Footprints size={20} />
+                <span>{t.sidebar.visitors}</span>
               </div>
             </button>
 
@@ -400,7 +514,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             >
               <div className="flex items-center gap-3">
                 <Users size={20} />
-                <span>المستخدمين</span>
+                <span>{t.sidebar.users}</span>
               </div>
             </button>
 
@@ -410,7 +524,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             >
               <div className="flex items-center gap-3">
                 <Layout size={20} />
-                <span>إدارة البنرات</span>
+                <span>{t.sidebar.banners}</span>
               </div>
             </button>
 
@@ -420,7 +534,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             >
               <div className="flex items-center gap-3">
                 <Megaphone size={20} className="text-primary" />
-                <span>رسائل رسمية</span>
+                <span>{t.sidebar.officialMsgs}</span>
               </div>
             </button>
 
@@ -431,7 +545,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               >
                 <div className="flex items-center gap-3">
                   <ShieldCheck size={20} className="text-amber-500" />
-                  <span>إدارة المشرفين</span>
+                  <span>{t.sidebar.manageAdmins}</span>
                 </div>
               </button>
             )}
@@ -442,7 +556,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
             >
               <div className="flex items-center gap-3">
                 <MessageSquare size={20} />
-                <span>رسائل العملاء</span>
+                <span>{t.sidebar.clientMsgs}</span>
               </div>
               <span className="bg-slate-200 dark:bg-white/10 text-xs py-1 px-2 rounded-md">{messages.length}</span>
             </button>
@@ -451,7 +565,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           <div className="mt-auto pt-6 border-t border-slate-200 dark:border-white/5 hidden lg:block">
              <div className="flex items-center gap-2 text-slate-500 justify-center text-sm">
                 <Activity size={14} className="animate-pulse text-green-500" />
-                <span>النظام يعمل بكفاءة</span>
+                <span>{t.stats.systemOk}</span>
              </div>
           </div>
         </div>
@@ -459,11 +573,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
         {/* Main Content */}
         <div className="flex-1 bg-slate-50 dark:bg-[#0f172a]/30 overflow-y-auto max-h-[900px]">
           
+          {/* --- ADMIN GROUP CHAT TAB --- */}
+          {activeTab === 'ADMIN_CHAT' && (
+            <div className="h-full flex flex-col relative bg-slate-100 dark:bg-black/40">
+               <div className="p-4 bg-white dark:bg-[#0f172a] border-b border-slate-200 dark:border-white/10 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-500/20 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                     <Users size={20} />
+                  </div>
+                  <div>
+                     <h3 className="font-bold text-slate-800 dark:text-white">{t.chat.groupTitle}</h3>
+                     <p className="text-xs text-slate-500">{t.chat.groupDesc}</p>
+                  </div>
+               </div>
+
+               <div className="flex-1 overflow-y-auto p-6 space-y-4" ref={groupChatContainerRef}>
+                  {groupMessages.map((msg) => {
+                     const isMe = msg.senderId === user.id;
+                     return (
+                        <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                           <div className={`flex flex-col max-w-[70%] ${isMe ? 'items-end' : 'items-start'}`}>
+                              <div className={`p-4 rounded-2xl text-sm shadow-sm ${
+                                 isMe 
+                                 ? 'bg-indigo-600 text-white rounded-br-none' 
+                                 : 'bg-white dark:bg-white/10 text-slate-800 dark:text-white rounded-bl-none'
+                              }`}>
+                                 {msg.text}
+                              </div>
+                              <span className="text-[10px] text-slate-400 mt-1 px-1">
+                                 {isMe ? t.chat.you : msg.senderName} • {new Date(msg.timestamp).toLocaleTimeString(locale, {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                           </div>
+                        </div>
+                     );
+                  })}
+               </div>
+
+               <div className="p-4 bg-white dark:bg-[#0f172a] border-t border-slate-200 dark:border-white/10">
+                  <form onSubmit={handleSendGroupMessage} className="flex gap-3">
+                     <input 
+                        type="text" 
+                        value={groupChatInput}
+                        onChange={e => setGroupChatInput(e.target.value)}
+                        className="flex-1 bg-slate-100 dark:bg-white/5 border-none rounded-xl px-4 py-3 outline-none dark:text-white focus:ring-2 focus:ring-indigo-500/20"
+                        placeholder={t.chat.placeholder}
+                     />
+                     <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl transition-colors shadow-lg shadow-indigo-500/20">
+                        <Send size={20} />
+                     </button>
+                  </form>
+               </div>
+            </div>
+          )}
+
           {/* --- LIVE SUPPORT TAB --- */}
           {activeTab === 'LIVE_SUPPORT' && (
             <div className="h-full flex flex-col md:flex-row">
                {/* Sessions List */}
-               <div className="w-full md:w-80 border-l border-slate-200 dark:border-white/10 overflow-y-auto bg-white dark:bg-black/20 flex flex-col">
+               <div className="w-full md:w-80 border-l ltr:border-l-0 ltr:border-r border-slate-200 dark:border-white/10 overflow-y-auto bg-white dark:bg-black/20 flex flex-col">
                   
                   {/* Incoming Requests Section */}
                   {incomingSessions.length > 0 && (
@@ -471,7 +637,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                       <div className="p-4 bg-red-50 dark:bg-red-900/10">
                          <h3 className="font-bold text-red-600 dark:text-red-400 text-sm flex items-center gap-2">
                             <Activity size={16} className="animate-pulse" />
-                            طلبات واردة ({incomingSessions.length})
+                            {t.chat.incoming} ({incomingSessions.length})
                          </h3>
                       </div>
                       {incomingSessions.map(session => (
@@ -482,14 +648,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                               </div>
                               <div className="flex-1 min-w-0">
                                  <div className="font-bold text-slate-800 dark:text-white text-sm truncate">{session.userName}</div>
-                                 <div className="text-xs text-slate-400">ينتظر التوصيل...</div>
+                                 <div className="text-xs text-slate-400">{t.chat.waiting}</div>
                               </div>
                             </div>
                             <Button 
                               onClick={() => handleAcceptChat(session.id)}
                               className="w-full !py-2 !text-xs bg-green-600 hover:bg-green-700 text-white shadow-md shadow-green-500/20"
                             >
-                               قبول المحادثة
+                               {t.chat.accept}
                             </Button>
                          </div>
                       ))}
@@ -497,20 +663,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   )}
 
                   <div className="p-4 bg-slate-100 dark:bg-white/5 border-b border-slate-200 dark:border-white/10">
-                     <h3 className="font-bold text-slate-700 dark:text-white text-sm">محادثاتي النشطة</h3>
+                     <h3 className="font-bold text-slate-700 dark:text-white text-sm">{t.chat.myChats}</h3>
                   </div>
                   
                   {myActiveSessions.length === 0 ? (
                     <div className="p-6 text-center text-slate-400 text-sm flex-1 flex flex-col items-center justify-center gap-2">
                        <Headphones size={24} className="opacity-20" />
-                       لا توجد محادثات نشطة
+                       {t.chat.noActive}
                     </div>
                   ) : (
                     myActiveSessions.map(session => (
                        <button
                          key={session.id}
                          onClick={() => setActiveChatId(session.id)}
-                         className={`w-full p-4 border-b border-slate-100 dark:border-white/5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-right ${activeChatId === session.id ? 'bg-indigo-50 dark:bg-indigo-900/20 border-r-4 border-r-indigo-500' : ''}`}
+                         className={`w-full p-4 border-b border-slate-100 dark:border-white/5 flex items-center gap-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-start ${activeChatId === session.id ? 'bg-indigo-50 dark:bg-indigo-900/20 border-r-4 rtl:border-r-4 rtl:border-l-0 ltr:border-l-4 ltr:border-r-0 border-indigo-500' : ''}`}
                        >
                           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold">
                              {session.userName.charAt(0).toUpperCase()}
@@ -518,10 +684,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                           <div className="flex-1 min-w-0">
                              <div className="font-bold text-slate-800 dark:text-white text-sm truncate">{session.userName}</div>
                              <div className="text-xs text-slate-400 truncate">
-                               {new Date(session.lastMessageAt).toLocaleTimeString('ar-EG', {hour: '2-digit', minute:'2-digit'})}
+                               {new Date(session.lastMessageAt).toLocaleTimeString(locale, {hour: '2-digit', minute:'2-digit'})}
                              </div>
                           </div>
-                          {activeChatId === session.id && <ArrowRightCircle size={16} className="text-indigo-500" />}
+                          {activeChatId === session.id && <ArrowRightCircle size={16} className="text-indigo-500 rtl:rotate-0 ltr:rotate-180" />}
                        </button>
                     ))
                   )}
@@ -533,18 +699,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                      <>
                         <div className="p-4 bg-white dark:bg-[#0f172a] border-b border-slate-200 dark:border-white/10 flex justify-between items-center">
                            <div className="font-bold text-slate-800 dark:text-white">
-                              محادثة مع: {supportSessions.find(s => s.id === activeChatId)?.userName}
+                              {t.chat.talkingTo}: {supportSessions.find(s => s.id === activeChatId)?.userName}
                            </div>
                            <Button 
                              onClick={() => handleEndChat(activeChatId)}
                              variant="secondary"
                              className="!px-3 !py-1 text-xs bg-red-500 hover:bg-red-600 border-none text-white"
                            >
-                             إنهاء المحادثة
+                             {t.chat.endChat}
                            </Button>
                         </div>
                         
-                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={activeChatContainerRef}>
                            {chatMessages.map(msg => {
                               const isMe = msg.isAdmin;
                               return (
@@ -556,7 +722,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                                  </div>
                               );
                            })}
-                           <div ref={chatEndRef} />
                         </div>
 
                         <div className="p-4 bg-white dark:bg-[#0f172a] border-t border-slate-200 dark:border-white/10">
@@ -566,7 +731,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                                 value={adminChatInput}
                                 onChange={e => setAdminChatInput(e.target.value)}
                                 className="flex-1 bg-slate-100 dark:bg-white/5 border-none rounded-xl px-4 py-2 outline-none dark:text-white"
-                                placeholder="اكتب ردك هنا..."
+                                placeholder={t.chat.replyPlaceholder}
                               />
                               <button type="submit" className="bg-indigo-600 text-white p-2 rounded-xl">
                                  <Send size={20} />
@@ -577,34 +742,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                   ) : (
                      <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
                         <Headphones size={48} className="mb-4 opacity-20" />
-                        <p>اختر محادثة من القائمة للبدء أو اقبل طلب جديد</p>
+                        <p>{t.chat.noActive}</p>
                      </div>
                   )}
                </div>
             </div>
           )}
 
-          {/* ... Other Tabs remain identical ... */}
-          
           {/* --- REQUESTS TAB --- */}
           {activeTab === 'REQUESTS' && (
             <div className="p-4 md:p-8">
               <div className="flex justify-between items-center mb-8">
-                <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white">إدارة الطلبات الواردة</h2>
+                <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white">{t.requests.title}</h2>
                 <button onClick={fetchData} className="p-2 hover:bg-white/50 dark:hover:bg-white/10 rounded-lg text-slate-500 hover:text-primary dark:hover:text-white transition-colors">
                   <Loader2 size={20} className={isLoading ? 'animate-spin' : ''} />
                 </button>
               </div>
 
               <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/10 shadow-sm">
-                <table className="w-full text-right border-collapse min-w-[900px]">
+                <table className="w-full text-start border-collapse min-w-[900px]">
                   <thead>
                     <tr className="text-slate-500 dark:text-slate-400 text-sm border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
-                      <th className="py-4 px-6 font-medium whitespace-nowrap">العميل</th>
-                      <th className="py-4 px-4 font-medium whitespace-nowrap">نوع المشروع</th>
-                      <th className="py-4 px-4 font-medium min-w-[250px]">الوصف</th>
-                      <th className="py-4 px-4 font-medium whitespace-nowrap">الحالة</th>
-                      <th className="py-4 px-6 font-medium whitespace-nowrap">إجراءات</th>
+                      <th className="py-4 px-6 font-medium whitespace-nowrap text-start">{t.requests.client}</th>
+                      <th className="py-4 px-4 font-medium whitespace-nowrap text-start">{t.requests.type}</th>
+                      <th className="py-4 px-4 font-medium min-w-[250px] text-start">{t.requests.desc}</th>
+                      <th className="py-4 px-4 font-medium whitespace-nowrap text-start">{t.requests.status}</th>
+                      <th className="py-4 px-6 font-medium whitespace-nowrap text-start">{t.requests.actions}</th>
                     </tr>
                   </thead>
                   <tbody className="text-slate-700 dark:text-slate-200">
@@ -615,7 +778,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                           <div className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-1">{req.email}</div>
                           <div className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                             <Clock size={12} />
-                            {new Date(req.createdAt).toLocaleDateString('ar-EG')}
+                            {new Date(req.createdAt).toLocaleDateString(locale)}
                           </div>
                         </td>
                         <td className="py-4 px-4 align-top">
@@ -626,29 +789,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                         <td className="py-4 px-4 align-top">
                           <div className="bg-slate-50 dark:bg-black/20 p-3 rounded-lg border border-slate-200 dark:border-white/5">
                             <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-3" title={req.description}>{req.description}</p>
-                            {req.budget && <div className="text-xs text-green-600 dark:text-green-400 mt-2 font-mono">💰 الميزانية: {req.budget}</div>}
+                            {req.budget && <div className="text-xs text-green-600 dark:text-green-400 mt-2 font-mono">💰 {t.requests.budget}: {req.budget}</div>}
                           </div>
                         </td>
                         <td className="py-4 px-4 align-top">
                           <span className={`px-3 py-1.5 rounded-full text-xs font-bold border flex w-fit items-center gap-1.5 whitespace-nowrap ${getStatusColor(req.status)}`}>
-                            {req.status === 'PENDING' ? 'قيد المراجعة' : 
-                             req.status === 'IN_PROGRESS' ? 'جاري العمل' :
-                             req.status === 'COMPLETED' ? 'مكتمل' : 'مرفوض'}
+                            {getStatusLabel(req.status)}
                           </span>
                         </td>
                         <td className="py-4 px-6 align-top">
                           <div className="flex gap-2">
-                             <button onClick={() => handleStatusChange(req.id, req.userId, 'PENDING')} className="p-2 bg-amber-100 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white rounded-lg transition-all" title="استلام / قيد الانتظار"><Clock size={18} /></button>
-                            <button onClick={() => handleStatusChange(req.id, req.userId, 'IN_PROGRESS')} className="p-2 bg-blue-100 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all" title="جاري العمل"><Loader2 size={18} /></button>
-                            <button onClick={() => handleStatusChange(req.id, req.userId, 'COMPLETED')} className="p-2 bg-green-100 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500 hover:text-white rounded-lg transition-all" title="اكتمال"><CheckCircle2 size={18} /></button>
-                            <button onClick={() => handleStatusChange(req.id, req.userId, 'REJECTED')} className="p-2 bg-red-100 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-all" title="رفض"><XCircle size={18} /></button>
+                             <button onClick={() => handleStatusChange(req.id, req.userId, 'PENDING')} className="p-2 bg-amber-100 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white rounded-lg transition-all" title={t.requests.statuses.PENDING}><Clock size={18} /></button>
+                            <button onClick={() => handleStatusChange(req.id, req.userId, 'IN_PROGRESS')} className="p-2 bg-blue-100 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500 hover:text-white rounded-lg transition-all" title={t.requests.statuses.IN_PROGRESS}><Loader2 size={18} /></button>
+                            <button onClick={() => handleStatusChange(req.id, req.userId, 'COMPLETED')} className="p-2 bg-green-100 dark:bg-green-500/10 border border-green-200 dark:border-green-500/20 text-green-600 dark:text-green-400 hover:bg-green-500 hover:text-white rounded-lg transition-all" title={t.requests.statuses.COMPLETED}><CheckCircle2 size={18} /></button>
+                            <button onClick={() => handleStatusChange(req.id, req.userId, 'REJECTED')} className="p-2 bg-red-100 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-all" title={t.requests.statuses.REJECTED}><XCircle size={18} /></button>
                           </div>
                         </td>
                       </tr>
                     ))}
                     {requests.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="text-center py-12 text-slate-500">لا توجد طلبات لعرضها</td>
+                        <td colSpan={5} className="text-center py-12 text-slate-500">{t.requests.empty}</td>
                       </tr>
                     )}
                   </tbody>
@@ -660,41 +821,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           {/* --- OFFICIAL MESSAGES TAB --- */}
           {activeTab === 'OFFICIAL_MESSAGES' && (
              <div className="p-8">
-               <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">رسائل رسمية للمستخدمين</h2>
+               <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">{t.official.title}</h2>
                <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-2xl mb-8">
                   <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
                      <Megaphone size={20} className="text-primary" />
-                     إرسال رسالة جديدة للجميع
+                     {t.official.new}
                   </h3>
                   <p className="text-slate-500 dark:text-slate-400 mb-6 text-sm">
-                    هذه الرسالة ستظهر لجميع مستخدمي الموقع في خانة "رسائل رسمية". استخدمها للإعلانات الهامة.
+                    {t.official.desc}
                   </p>
                   
                   <form onSubmit={handleSendAnnouncement} className="space-y-4">
                      <div>
-                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">عنوان الرسالة</label>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">{t.official.labelTitle}</label>
                         <input 
                           type="text" 
                           required
                           value={announcementTitle}
                           onChange={e => setAnnouncementTitle(e.target.value)}
                           className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 outline-none focus:border-primary text-slate-900 dark:text-white"
-                          placeholder="مثال: خصومات الجمعة البيضاء"
                         />
                      </div>
                      <div>
-                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">نص الرسالة</label>
+                        <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">{t.official.labelBody}</label>
                         <textarea 
                           required
                           rows={4}
                           value={announcementBody}
                           onChange={e => setAnnouncementBody(e.target.value)}
                           className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 outline-none focus:border-primary text-slate-900 dark:text-white"
-                          placeholder="اكتب تفاصيل الرسالة الرسمية هنا..."
                         />
                      </div>
                      <Button type="submit" isLoading={isSendingAnnouncement} icon={<Send size={18} />}>
-                       نشر الرسالة الرسمية
+                       {t.official.btnSend}
                      </Button>
                   </form>
                </div>
@@ -704,16 +863,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           {/* --- ADMINS MANAGEMENT TAB (SUPER ADMIN ONLY) --- */}
           {activeTab === 'ADMINS' && isSuperAdmin && (
             <div className="p-8">
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">إدارة المشرفين وصلاحيات الوصول</h2>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">{t.admins.title}</h2>
               
               {/* Default Setup Button */}
               <div className="bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-500/20 p-6 rounded-2xl mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
                  <div>
-                    <h3 className="text-lg font-bold text-amber-800 dark:text-amber-400">الإعداد السريع للطاقم</h3>
-                    <p className="text-sm text-amber-700 dark:text-amber-500/80">إنشاء حسابات المشرفين الافتراضية (Farida, Admin 1, Admin 2, Admin 3) بضغطة واحدة.</p>
+                    <h3 className="text-lg font-bold text-amber-800 dark:text-amber-400">{t.admins.defaultSetup}</h3>
+                    <p className="text-sm text-amber-700 dark:text-amber-500/80">{t.admins.defaultDesc}</p>
                  </div>
                  <Button onClick={handleCreateDefaultAdmins} isLoading={isCreatingAdmin} className="whitespace-nowrap bg-amber-600 hover:bg-amber-700 text-white border-none shadow-lg shadow-amber-600/20">
-                   إنشاء طاقم الإدارة الافتراضي
+                   {t.admins.btnCreateDefault}
                  </Button>
               </div>
 
@@ -721,51 +880,48 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-2xl mb-8">
                  <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
                    <UserPlus size={20} className="text-primary" />
-                   إضافة مشرف جديد
+                   {t.admins.addCustom}
                  </h3>
                  <form onSubmit={handleCreateCustomAdmin} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                     <div>
-                       <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1 block">الاسم</label>
+                       <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1 block">{t.admins.name}</label>
                        <input 
                          type="text" 
                          value={newAdminName} 
                          onChange={e => setNewAdminName(e.target.value)}
                          className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 outline-none focus:border-primary text-slate-900 dark:text-white"
-                         placeholder="اسم المشرف"
                          required
                        />
                     </div>
                     <div>
-                       <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1 block">البريد الإلكتروني</label>
+                       <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1 block">{t.admins.email}</label>
                        <input 
                          type="email" 
                          value={newAdminEmail} 
                          onChange={e => setNewAdminEmail(e.target.value)}
                          className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 outline-none focus:border-primary text-slate-900 dark:text-white"
-                         placeholder="admin@example.com"
                          required
                        />
                     </div>
                     <div>
-                       <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1 block">كلمة المرور</label>
+                       <label className="text-sm font-semibold text-slate-600 dark:text-slate-400 mb-1 block">{t.admins.password}</label>
                        <input 
                          type="password" 
                          value={newAdminPassword} 
                          onChange={e => setNewAdminPassword(e.target.value)}
                          className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 outline-none focus:border-primary text-slate-900 dark:text-white"
-                         placeholder="******"
                          required
                          minLength={6}
                        />
                     </div>
                     <div className="md:col-span-3 mt-2">
-                       <Button type="submit" isLoading={isCreatingAdmin} className="w-full">إضافة المشرف</Button>
+                       <Button type="submit" isLoading={isCreatingAdmin} className="w-full">{t.admins.btnAdd}</Button>
                     </div>
                  </form>
               </div>
 
               {/* Admin List */}
-              <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">قائمة المشرفين الحاليين</h3>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-white mb-4">{t.admins.currentAdmins}</h3>
               <div className="grid gap-4 mb-8">
                  {adminUsers.map(admin => (
                    <div key={admin.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-4 rounded-xl flex items-center justify-between">
@@ -782,7 +938,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                          <button 
                            onClick={() => handleDeleteUser(admin.id)}
                            className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors"
-                           title="حذف المشرف"
+                           title={t.users.delete}
                          >
                             <Trash2 size={18} />
                          </button>
@@ -795,17 +951,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
               <div className="border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/10 rounded-2xl p-6 mt-12">
                  <h3 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
                     <AlertTriangle size={24} />
-                    منطقة الخطر
+                    {t.admins.dangerZone}
                  </h3>
                  <p className="text-red-800 dark:text-red-300 mb-6 text-sm">
-                    الإجراءات في هذا القسم حرجة جداً ولا يمكن التراجع عنها. يرجى توخي الحذر الشديد.
+                    {t.admins.dangerDesc}
                  </p>
                  
                  <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 bg-white dark:bg-black/20 rounded-xl border border-red-100 dark:border-red-900/30">
                     <div>
-                       <h4 className="font-bold text-slate-800 dark:text-white">تصفير النظام وحذف كافة البيانات</h4>
+                       <h4 className="font-bold text-slate-800 dark:text-white">{t.admins.resetTitle}</h4>
                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-md">
-                          سيتم حذف جميع (الطلبات، الرسائل، الإشعارات، المحادثات، الإعلانات الرسمية) بشكل نهائي. لن يتم حذف حسابات المستخدمين أو المدراء.
+                          {t.admins.resetDesc}
                        </p>
                     </div>
                     <Button 
@@ -813,9 +969,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                        isLoading={isResettingSystem}
                        className="bg-red-600 hover:bg-red-700 text-white border-none shadow-lg shadow-red-600/20 whitespace-nowrap"
                     >
-                       حذف كل البيانات الآن
+                       {t.admins.btnReset}
                     </Button>
                  </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- VISITORS TAB --- */}
+          {activeTab === 'VISITORS' && (
+            <div className="p-4 md:p-8">
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">{t.visitors.title} ({visitors.length})</h2>
+              <p className="text-slate-500 mb-8">{t.visitors.desc}</p>
+              
+              <div className="grid grid-cols-1 gap-4">
+                {visitors.length === 0 ? (
+                   <div className="p-8 text-center text-slate-500 bg-white/50 dark:bg-white/5 rounded-2xl border border-dashed border-slate-300 dark:border-white/10">
+                      {t.visitors.empty}
+                   </div>
+                ) : (
+                  visitors.map((visitor) => (
+                    <div key={visitor.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-white/10 transition-colors">
+                       <div className="flex items-center gap-4 w-full md:w-auto overflow-hidden">
+                          <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-500/20 rounded-2xl flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-lg shrink-0">
+                             <Footprints size={24} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                             <div className="font-bold text-slate-800 dark:text-white text-sm font-mono truncate" title={visitor.deviceId}>
+                               ID: {visitor.deviceId.substring(0, 12)}...
+                             </div>
+                             <div className="text-xs text-slate-500 dark:text-slate-400 truncate mt-1" title={visitor.userAgent}>
+                                {visitor.userAgent.substring(0, 50)}...
+                             </div>
+                          </div>
+                       </div>
+
+                       <div className="flex items-center justify-between w-full md:w-auto gap-4 md:pl-4 mt-2 md:mt-0 border-t border-slate-100 dark:border-white/5 md:border-none pt-4 md:pt-0">
+                          <div className="text-xs text-slate-500 flex flex-col items-end gap-1">
+                             <span className="font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-white/10 px-2 py-0.5 rounded">
+                                {visitor.visitCount} {t.visitors.visits}
+                             </span>
+                             <span>
+                               {new Date(visitor.lastVisit).toLocaleDateString(locale)} {new Date(visitor.lastVisit).toLocaleTimeString(locale, {hour:'2-digit', minute:'2-digit'})}
+                             </span>
+                          </div>
+                       </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}
@@ -823,7 +1024,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           {/* --- USERS TAB --- */}
           {activeTab === 'USERS' && (
             <div className="p-4 md:p-8">
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">المستخدمين المسجلين ({users.length})</h2>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">{t.users.title} ({users.length})</h2>
               <div className="grid grid-cols-1 gap-4">
                 {users.map((u) => (
                   <div key={u.id} className={`bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-5 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 hover:bg-slate-50 dark:hover:bg-white/10 transition-colors group shadow-sm ${u.status === 'BANNED' ? 'opacity-70 bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30' : ''}`}>
@@ -836,8 +1037,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                         <div className="min-w-0 flex-1">
                            <div className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                              <span className="truncate" title={u.name}>{u.name}</span>
-                             {u.status === 'BANNED' && <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full shrink-0">محظور</span>}
-                             {u.role === 'ADMIN' && <span className="text-[10px] bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-full shrink-0">مدير</span>}
+                             {u.status === 'BANNED' && <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full shrink-0">{t.users.banned}</span>}
+                             {u.role === 'ADMIN' && <span className="text-[10px] bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 px-2 py-0.5 rounded-full shrink-0">{t.users.roleAdmin}</span>}
                            </div>
                            <div className="text-sm text-slate-500 dark:text-slate-400 truncate font-mono" title={u.email}>{u.email}</div>
                         </div>
@@ -847,7 +1048,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                      <div className="flex items-center justify-between w-full md:w-auto gap-4 md:pl-4 mt-2 md:mt-0 border-t border-slate-100 dark:border-white/5 md:border-none pt-4 md:pt-0">
                         <div className="text-xs text-slate-500 flex items-center gap-2 bg-slate-100 dark:bg-black/20 px-3 py-1.5 rounded-lg whitespace-nowrap">
                            <Clock size={12} />
-                           {new Date(u.joinedAt).toLocaleDateString('ar-EG')}
+                           {new Date(u.joinedAt).toLocaleDateString(locale)}
                         </div>
                         
                         {u.role !== 'ADMIN' && (
@@ -855,14 +1056,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                              <button 
                                 onClick={() => handleToggleBanUser(u.id, u.status)}
                                 className={`p-2 rounded-lg transition-colors border ${u.status === 'BANNED' ? 'bg-green-100 dark:bg-green-500/10 border-green-200 dark:border-green-500/30 text-green-600 dark:text-green-400 hover:bg-green-500 hover:text-white' : 'bg-amber-100 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white'}`}
-                                title={u.status === 'BANNED' ? "فك الحظر" : "حظر المستخدم"}
+                                title={u.status === 'BANNED' ? t.users.unban : t.users.ban}
                              >
                                 {u.status === 'BANNED' ? <Unlock size={18} /> : <Lock size={18} />}
                              </button>
                              <button 
                                 onClick={() => handleDeleteUser(u.id)}
                                 className="p-2 hover:bg-red-500 hover:text-white bg-red-100 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400 rounded-lg transition-colors" 
-                                title="حذف المستخدم"
+                                title={t.users.delete}
                              >
                                 <Trash2 size={18} />
                              </button>
@@ -878,16 +1079,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           {/* --- BANNERS TAB --- */}
           {activeTab === 'BANNERS' && (
             <div className="p-8">
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">إدارة بنرات الإعلانات</h2>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-6">{t.banners.title}</h2>
               
               <form onSubmit={handleAddBanner} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-2xl mb-8 shadow-sm">
                  <h3 className="text-lg font-semibold text-slate-700 dark:text-white mb-4 flex items-center gap-2">
-                    <Plus size={18} /> إضافة بنر جديد
+                    <Plus size={18} /> {t.banners.add}
                  </h3>
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <input 
                        type="text" 
-                       placeholder="عنوان البنر"
+                       placeholder={t.banners.placeholderTitle}
                        className="bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-xl px-4 py-3 text-slate-900 dark:text-white outline-none focus:border-primary"
                        value={newBannerTitle}
                        onChange={(e) => setNewBannerTitle(e.target.value)}
@@ -908,7 +1109,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                         className={`flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl border border-dashed cursor-pointer transition-colors ${selectedFile ? 'bg-green-100 dark:bg-green-500/10 border-green-500/50 text-green-600 dark:text-green-400' : 'bg-slate-50 dark:bg-black/20 border-slate-300 dark:border-white/20 text-slate-500 dark:text-slate-400 hover:border-primary hover:text-primary'}`}
                       >
                         <Upload size={18} />
-                        {selectedFile ? selectedFile.name : 'اضغط لرفع صورة من الجهاز'}
+                        {selectedFile ? selectedFile.name : t.banners.upload}
                       </label>
                     </div>
                  </div>
@@ -919,7 +1120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                     isLoading={isUploading}
                     disabled={!selectedFile || !newBannerTitle}
                  >
-                   {isUploading ? 'جاري الرفع...' : 'نشر البنر'}
+                   {isUploading ? t.banners.uploading : t.banners.publish}
                  </Button>
               </form>
 
@@ -932,7 +1133,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                              <div>
                                 <h4 className="text-xl font-bold text-white">{banner.title}</h4>
                                 <div className={`text-xs mt-1 ${banner.isActive ? 'text-green-400' : 'text-slate-400'}`}>
-                                   {banner.isActive ? 'نشط' : 'غير نشط'}
+                                   {banner.isActive ? t.banners.active : t.banners.inactive}
                                 </div>
                              </div>
                           </div>
@@ -953,7 +1154,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                        </div>
                     </div>
                  ))}
-                 {banners.length === 0 && <div className="text-center text-slate-500 py-8">لا توجد بنرات حالياً</div>}
+                 {banners.length === 0 && <div className="text-center text-slate-500 py-8">{t.banners.empty}</div>}
               </div>
             </div>
           )}
@@ -961,7 +1162,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
           {/* --- MESSAGES TAB --- */}
           {activeTab === 'MESSAGES' && (
             <div className="p-8">
-              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">رسائل العملاء</h2>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-8">{t.messages.title}</h2>
               <div className="grid gap-4">
                 {messages.map((msg) => (
                   <div key={msg.id} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 p-6 rounded-2xl hover:bg-slate-50 dark:hover:bg-white/10 transition-colors shadow-sm">
@@ -975,7 +1176,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user }) => {
                           <div className="text-xs text-slate-500 dark:text-slate-400">{msg.phone}</div>
                         </div>
                       </div>
-                      <div className="text-xs text-slate-500">{new Date(msg.date).toLocaleDateString('ar-EG')}</div>
+                      <div className="text-xs text-slate-500">{new Date(msg.date).toLocaleDateString(locale)}</div>
                     </div>
                     <p className="text-slate-600 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-black/20 p-4 rounded-xl text-sm border border-slate-100 dark:border-white/5">
                       {msg.text}

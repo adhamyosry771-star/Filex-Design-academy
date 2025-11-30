@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+
+
+import React, { useState, useEffect, useLayoutEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { RequestForm } from './components/RequestForm';
@@ -9,9 +11,10 @@ import { Contact } from './components/Contact';
 import { AdminDashboard } from './components/AdminDashboard';
 import { UserMessages } from './components/UserMessages';
 import { LiveSupport } from './components/LiveSupport'; 
+import { PrivacyPolicy } from './components/PrivacyPolicy';
 import { IntroOverlay } from './components/IntroOverlay';
 import { PageView, User, Language, ProjectType } from './types';
-import { authService } from './services/mockDb';
+import { authService, requestService } from './services/mockDb';
 import { CheckCircle2, ArrowRight, LayoutDashboard, Loader2 } from 'lucide-react';
 import { Button } from './components/Button';
 import { translations } from './i18n';
@@ -33,6 +36,26 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>(() => {
     return (localStorage.getItem('language') as Language) || 'ar';
   });
+
+  // Aggressive Scroll Reset
+  useLayoutEffect(() => {
+    // Disable browser's automatic scroll restoration
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
+    
+    // Force scroll to top immediately
+    window.scrollTo(0, 0);
+    document.body.scrollTop = 0;
+    document.documentElement.scrollTop = 0;
+
+    // Backup timer in case of async rendering delays
+    const timer = setTimeout(() => {
+      window.scrollTo(0, 0);
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [currentPage]); // Re-run when page changes
 
   useEffect(() => {
     // Apply theme class to HTML element
@@ -61,6 +84,10 @@ const App: React.FC = () => {
       setAuthLoading(false);
     });
 
+    // --- TRACK VISITOR ---
+    // This runs once when the app mounts to count the visit
+    requestService.trackVisitor();
+
     // Cleanup subscription
     return () => unsubscribe();
   }, []);
@@ -83,7 +110,6 @@ const App: React.FC = () => {
   const handleServiceClick = (type: ProjectType) => {
     setSelectedProjectType(type);
     setCurrentPage('REQUEST_FORM');
-    // Scroll to top
     window.scrollTo(0, 0);
   };
 
@@ -119,7 +145,7 @@ const App: React.FC = () => {
             t={t.nav}
           />
           
-          <main className="flex-grow relative z-10">
+          <main className="flex-grow relative z-10 min-h-[calc(100vh-80px)]">
             {(() => {
               switch (currentPage) {
                 case 'HOME':
@@ -127,6 +153,9 @@ const App: React.FC = () => {
                 
                 case 'CONTACT':
                   return <Contact t={t.contact} language={language} />;
+
+                case 'PRIVACY':
+                  return <PrivacyPolicy t={t.privacy} />;
 
                 case 'LOGIN':
                   return (
@@ -157,7 +186,7 @@ const App: React.FC = () => {
 
                 case 'ADMIN_DASHBOARD':
                   return user && user.role === 'ADMIN' ? (
-                    <AdminDashboard user={user} />
+                    <AdminDashboard user={user} t={t.admin} language={language} />
                   ) : (
                     user ? <Dashboard user={user} onUserUpdate={setUser} t={t.dashboard} /> : <Auth mode="LOGIN" onSuccess={handleLogin} onSwitchMode={setCurrentPage} t={t.auth} />
                   );
@@ -197,40 +226,42 @@ const App: React.FC = () => {
                 case 'SUCCESS':
                   return (
                     <div className="max-w-2xl mx-auto px-4 py-32 text-center animate-fade-in relative z-10">
-                      <div className="bg-green-500/20 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
-                        <CheckCircle2 className="w-12 h-12 text-green-600 dark:text-green-400" />
-                      </div>
-                      <h2 className="text-4xl font-bold text-slate-800 dark:text-white mb-4 drop-shadow-lg">
-                        {t.success.title}
-                      </h2>
-                      <p className="text-xl text-slate-600 dark:text-slate-300 mb-10 leading-relaxed">
-                        {t.success.desc}
-                        {user && ` ${t.success.track}`}
-                      </p>
-                      <div className="flex justify-center gap-4">
-                        <Button onClick={() => setCurrentPage('HOME')} variant="outline">
-                          <ArrowRight className="ml-2 rtl:ml-2 ltr:ml-0 ltr:mr-2" size={18} />
-                          {t.nav.home}
-                        </Button>
-                        {user ? (
-                          <Button onClick={() => setCurrentPage('DASHBOARD')} icon={<LayoutDashboard size={18} />}>
+                      <div className="bg-white/80 dark:bg-white/5 backdrop-blur-xl border border-slate-200 dark:border-white/10 p-8 rounded-3xl shadow-2xl">
+                        <div className="w-20 h-20 bg-green-100 dark:bg-green-500/20 rounded-full flex items-center justify-center text-green-600 dark:text-green-400 mx-auto mb-6">
+                          <CheckCircle2 size={40} />
+                        </div>
+                        <h2 className="text-3xl font-bold text-slate-800 dark:text-white mb-4">{t.success.title}</h2>
+                        <p className="text-slate-600 dark:text-slate-300 mb-8 text-lg">
+                          {t.success.desc}
+                          <br />
+                          {t.success.track}
+                        </p>
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                          <Button 
+                            onClick={() => setCurrentPage('DASHBOARD')}
+                            variant="primary"
+                            icon={<LayoutDashboard size={20} />}
+                          >
                             {t.nav.dashboard}
                           </Button>
-                        ) : (
-                          <Button onClick={() => setCurrentPage('REQUEST_FORM')}>
+                          <Button 
+                            onClick={() => setCurrentPage('REQUEST_FORM')}
+                            variant="outline"
+                          >
                             {t.success.newRequest}
                           </Button>
-                        )}
+                        </div>
                       </div>
                     </div>
                   );
+                  
                 default:
-                  return <Hero onStart={() => setCurrentPage('REQUEST_FORM')} onServiceClick={handleServiceClick} t={t.hero} language={language} />;
+                  return <Hero onStart={() => setCurrentPage(user ? 'REQUEST_FORM' : 'REGISTER')} onServiceClick={handleServiceClick} t={t.hero} language={language} />;
               }
             })()}
           </main>
-          
-          <Footer t={t.footer} />
+
+          <Footer t={t.footer} onNavigate={setCurrentPage} />
         </>
       )}
     </div>

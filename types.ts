@@ -72,6 +72,17 @@ export interface Announcement {
   createdBy: string;
 }
 
+// --- Visitor Tracking ---
+export interface Visitor {
+  id: string;
+  deviceId: string;
+  userAgent: string; // To detect device type/browser
+  firstVisit: string;
+  lastVisit: string;
+  visitCount: number;
+  isRegistered: boolean; // True if they later logged in
+}
+
 // --- Live Support Types ---
 
 export interface ChatMessage {
@@ -94,6 +105,15 @@ export interface SupportSession {
   unreadByAdmin: number;
 }
 
-export type PageView = 'HOME' | 'REQUEST_FORM' | 'SUCCESS' | 'LOGIN' | 'REGISTER' | 'DASHBOARD' | 'ADMIN_DASHBOARD' | 'CONTACT' | 'USER_MESSAGES' | 'LIVE_SUPPORT';
+// --- Admin Group Chat Types ---
+export interface AdminGroupMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  text: string;
+  timestamp: string;
+}
+
+export type PageView = 'HOME' | 'REQUEST_FORM' | 'SUCCESS' | 'LOGIN' | 'REGISTER' | 'DASHBOARD' | 'ADMIN_DASHBOARD' | 'CONTACT' | 'USER_MESSAGES' | 'LIVE_SUPPORT' | 'PRIVACY';
 
 export type Language = 'ar' | 'en' | 'fr';

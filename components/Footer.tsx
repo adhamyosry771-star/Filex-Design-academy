@@ -1,12 +1,15 @@
 
+
 import React from 'react';
 import { Instagram, Twitter, Linkedin, Mail, Palette } from 'lucide-react';
+import { PageView } from '../types';
 
 interface FooterProps {
   t?: any;
+  onNavigate: (page: PageView) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ t }) => {
+export const Footer: React.FC<FooterProps> = ({ t, onNavigate }) => {
   // Fallback if t is not provided yet (initial render)
   if (!t) return null;
 
@@ -29,10 +32,18 @@ export const Footer: React.FC<FooterProps> = ({ t }) => {
           <div>
             <h4 className="text-lg font-semibold text-slate-900 dark:text-white mb-6">{t.links}</h4>
             <ul className="space-y-3">
-              <li><a href="#" className="hover:text-primary transition-colors hover:translate-x-1 rtl:hover:-translate-x-1 inline-block duration-200">{t.home}</a></li>
+              <li>
+                <button onClick={() => onNavigate('HOME')} className="hover:text-primary transition-colors hover:translate-x-1 rtl:hover:-translate-x-1 inline-block duration-200">
+                  {t.home}
+                </button>
+              </li>
               <li><a href="#" className="hover:text-primary transition-colors hover:translate-x-1 rtl:hover:-translate-x-1 inline-block duration-200">{t.portfolio}</a></li>
               <li><a href="#" className="hover:text-primary transition-colors hover:translate-x-1 rtl:hover:-translate-x-1 inline-block duration-200">{t.services}</a></li>
-              <li><a href="#" className="hover:text-primary transition-colors hover:translate-x-1 rtl:hover:-translate-x-1 inline-block duration-200">{t.privacy}</a></li>
+              <li>
+                <button onClick={() => onNavigate('PRIVACY')} className="hover:text-primary transition-colors hover:translate-x-1 rtl:hover:-translate-x-1 inline-block duration-200">
+                  {t.privacy}
+                </button>
+              </li>
             </ul>
           </div>
 
